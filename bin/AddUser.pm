@@ -1,6 +1,6 @@
 package AddUser;
 #
-# @brief    Add new user
+# @brief    Add new user to database/table
 # @version  ver.1.0
 # @date     Mon Aug 22 16:09:02 CEST 2016
 # @company  Frobas IT Department, www.frobas.com 2016
@@ -11,6 +11,7 @@ use strict;
 use warnings;
 use Exporter;
 use DBI;
+use GetMaxEid qw(getmaxeid);
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(dirname(abs_path($0))) . '/../../lib/perl5';
@@ -18,23 +19,23 @@ use Status;
 our @ISA = qw(Exporter);
 our %EXPORT_TAGS = ('all' => [qw()]);
 our @EXPORT_OK = (@{$EXPORT_TAGS{'all'}});
-our @EXPORT = qw(addUser);
+our @EXPORT = qw(adduser);
 our $VERSION = '1.0';
-our $TOOL_DBG="false";
+our $TOOL_DBG = "false";
 
 #
-# @brief   Add new user
-# @params  Values required database handler and hash structure with details
+# @brief   Add new user to database/table
+# @params  Values required argument structure
 # @retval  Success 0, else 1
 #
 # @usage
 # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 # 
-# use AddUser qw(addUser);
+# use AddUser qw(adduser);
 #
 # ...
 #
-# my $status = addUser($dbh, \%ops);
+# my $status = adduser(\%argStructure);
 #
 # if ($status == $SUCCESS) {
 #	# true
@@ -46,83 +47,76 @@ our $TOOL_DBG="false";
 #	# exit 128
 # }
 #
-sub addUser {
+sub adduser {
 	my $fCaller = (caller(0))[3];
-	my $msg="None";
-	my $dbHandler = $_[0];
-	my %ops = %{$_[1]};
-	if((defined($dbHandler)) && (%ops)) {
-		my $stmtMaxEid = qq(
-			SELECT employee_info.eid
-			FROM employee_info 
-			where 
-			employee_info.eid = 
-			\(SELECT MAX\(employee_info.eid\) FROM employee_info\);
-		);
-		my $sthMaxEid = $dbHandler->prepare($stmtMaxEid);
-		my $rvMaxEid = $sthMaxEid->execute() or die($DBI::errstr);
-		if($rvMaxEid < 0){
-			print($DBI::errstr);
-		}
-		my $maxEidRef = $sthMaxEid->fetchrow_hashref();
-		my $maxEid = 0;
-		$maxEid = $maxEidRef->{eid};
-		if($maxEid == 0) {
-			print("\nFailed to get MAX ID of users\n\n");
-			$msg="Failed to get MAX ID form employee_info table";
+	my $msg = "None";
+	my %argStructure = %{$_[0]};
+	if(%argStructure) {
+		my $maxEid;
+		if(getmaxeid(\%argStructure, \$maxEid) == $SUCCESS) {
+			$msg = "Select from table [$argStructure{DBTE}]";
 			if("$TOOL_DBG" eq "true") {
 				print("[Info] " . $fCaller . " " . $msg . "\n");
 			}
-			return ($NOT_SUCCESS);
-		}
-		my $stmtGetUnid = qq(
-			SELECT employee_info.eid, employee_info.username, 
-			employee_info.uid FROM employee_info;
-		);
-		my $sthUnid = $dbHandler->prepare($stmtGetUnid);
-		my $rvUnid = $sthUnid->execute() or die($DBI::errstr);
-		if($rvUnid < 0){
-			print($DBI::errstr);
-		}
-		my @unid;
-		my @existingEids;
-		while(@unid = $sthUnid->fetchrow_array()) {
-			if(("$ops{NAME}" eq "$unid[1]") || ("$ops{UDID}" eq "$unid[2]")) {
-				$msg = "User $ops{NAME} (ID $ops{UDID}) already exist";
-				print("\n" . $msg . "\n\n");
-				return ($NOT_SUCCESS);
+			my $stmtGetUnid = qq (
+				SELECT $argStructure{DBTE}.eid, 
+				$argStructure{DBTE}.username, 
+				$argStructure{DBTE}.uid 
+				FROM $argStructure{DBTE};
+			);
+			my $sthUnid = $argStructure{DBI}->prepare($stmtGetUnid);
+			my $rvUnid = $sthUnid->execute() or die($DBI::errstr);
+			if($rvUnid < 0) {
+				print($DBI::errstr);
 			}
-			push(@existingEids, $unid[0]);
-		}
-		my $i;
-		my @missingEids;
-		foreach (@existingEids) {
-			if ($_ != ++$i) {
-				push(@missingEids, $i .. $_ - 1);
-				$i = $_;
+			my @unid;
+			my @existingEids;
+			my $name = "$argStructure{OPT}->{NAME}";
+			my $udid = "$argStructure{OPT}->{UDID}";
+			my $fname = "$argStructure{OPT}->{FNAME}";
+			while(@unid = $sthUnid->fetchrow_array()) {
+				if(("$name" eq "$unid[1]") || ("$udid" eq "$unid[2]")) {
+					$msg = "User $name (ID $udid) already exist";
+					print("\n" . $msg . "\n\n");
+					return ($NOT_SUCCESS);
+				}
+				push(@existingEids, $unid[0]);
 			}
+			my $i;
+			my @missingEids;
+			foreach (@existingEids) {
+				if ($_ != ++$i) {
+					push(@missingEids, $i .. $_ - 1);
+					$i = $_;
+				}
+			}
+			if(defined($missingEids[0])) {
+				$maxEid = $missingEids[0];
+			} else {
+				$maxEid = $maxEid + 1;
+			}
+			$msg = "Insert to table [$argStructure{DBTE}]";
+			if("$TOOL_DBG" eq "true") {
+				print("[Info] " . $fCaller . " " . $msg . "\n");
+			}
+			my $stmtAddUser = qq (
+				INSERT INTO $argStructure{DBTE} \(eid, username, uid, fullname\) 
+				VALUES \($maxEid, \'$name\', $udid, \'$fname\'\);
+			);
+			my $sthAddUser = $argStructure{DBI}->prepare($stmtAddUser);
+			my $rvAddUser = $sthAddUser->execute() or die($DBI::errstr);
+			if($rvAddUser < 0) {
+				print($DBI::errstr);
+			}
+			$msg = "Done";
+			if("$TOOL_DBG" eq "true") {
+				print("[Info] " . $fCaller . " " . $msg . "\n");
+			}
+			return ($SUCCESS);
 		}
-		if(defined($missingEids[0])) {
-			$maxEid = $missingEids[0];
-		} else {
-			$maxEid = $maxEid + 1;
-		}
-		my $stmtAddUser = qq(
-			INSERT INTO employee_info \(eid, username, uid, fullname\) 
-			VALUES \($maxEid, \'$ops{NAME}\', $ops{UDID}, \'$ops{FNAME}\'\);
-		);
-		my $sthAddUser = $dbHandler->prepare($stmtAddUser);
-		my $rvAddUser = $sthAddUser->execute() or die($DBI::errstr);
-		if($rvAddUser < 0){
-			print($DBI::errstr);
-		}
-		$msg="Done";
-        if("$TOOL_DBG" eq "true") {
-			print("[Info] " . $fCaller . " " . $msg . "\n");
-        }
-		return ($SUCCESS);
+		return ($NOT_SUCCESS);
 	}
-	$msg = "Check argument(s) [DB_HANDLER] and [NEW_USER_STRUCTURE]";
+	$msg = "Check argument [ARGUMENT_STRUCTURE]";
     print("[Error] " . $fCaller . " " . $msg . "\n");
 	return ($NOT_SUCCESS);
 } 
@@ -132,15 +126,15 @@ __END__
 
 =head1 NAME
 
-AddUser - Add new user
+AddUser - Add new user to database/table
 
 =head1 SYNOPSIS
 
-	use AddUser qw(addUser);
+	use AddUser qw(adduser);
 
 	...
 
-	my $status = addUser($dbh, \%ops);
+	my $status = adduser(\%argStructure);
 
 	if ($status == $SUCCESS) {
 		# true
@@ -152,13 +146,13 @@ AddUser - Add new user
 		# exit 128
 	}
 
-=head1 DESCRIPTION
+=head1 DESCRIPTION 
 
-Add new user
+Add new user to database/table
 
 =head2 EXPORT
 
-addUser - return 0 for success, else return 1
+adduser - return 0 for success, else return 1
 
 =head1 AUTHOR
 

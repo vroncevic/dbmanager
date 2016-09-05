@@ -12,14 +12,14 @@ use DBI;
 use Sys::Hostname;
 use Getopt::Long;
 use Pod::Usage;
-use ListAll qw(listAll);
-use ListEmployees qw(listEmployees);
-use ListDepartments qw(listDepartments);
-use DelUser qw(delUser);
-use AddUser qw(addUser);
-use AddDepartment qw(addDepartment);
-use DelDepartment qw(delDepartment);
-use UserToGroup qw(userToGroup);
+use ListAll qw(listall);
+use ListEmployees qw(listemployees);
+use ListDepartments qw(listdepartments);
+use AddUser qw(adduser);
+use DelUser qw(deluser);
+use AddDepartment qw(adddepartment);
+use DelDepartment qw(deldepartment);
+use UserToGroup qw(usertogroup);
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(dirname(abs_path($0))) . '/../../lib/perl5';
@@ -65,80 +65,78 @@ our $TOOL_DBG="false";
 #
 sub dbmanager {
 	my $fCaller = (caller(0))[3];
+	my $msg = "None";
 	my $host = hostname();
-	my %ops = %{$_[0]};
+	my %opt = %{$_[0]};
 	my %preferences;
-	my $preferencesRef = \%preferences;
-	my $status = 1;
-	$status = readpref($cfg, $preferencesRef);
-	if($status == $NOT_SUCCESS) {
-		exit(137);
-	}
-	my $driver = "Pg"; 
-	my $database = "$preferences{DB_NAME}";
-	my $dbname = "dbname=$database";
-	my $dbhost = "host=$preferences{DB_HOST}";
-	my $dbport = "port=$preferences{DB_PORT}";
-	my $dsn = "DBI:$driver:$dbname;$dbhost;$dbport";
-	my $userid = "$preferences{DB_USER}";
-	my $password = "$preferences{DB_PASSWORD}";
-	my $dbh = DBI->connect($dsn, $userid, $password, {RaiseError => 1}) 
-		or die($DBI::errstr);
-	if("$ops{OPS}" eq "ADD") {
-		if((defined($ops{NAME})) && (defined($ops{UDID}))) {
-			if(("$ops{ADD}" eq "user") && (defined($ops{FNAME}))) {
-				$status = addUser($dbh, \%ops);
-				if($status == $NOT_SUCCESS) {
-					exit(138);
-				}
-			} elsif("$ops{ADD}" eq "department") {
-				$status = addDepartment($dbh, \%ops);
-				if($status == $NOT_SUCCESS) {
-					exit(139);
-				}
+	my %argStructure;
+	my $status = readpref($cfg, \%preferences);
+	if($status == $SUCCESS) {
+		my $dbDriver = "Pg"; 
+		my $dbName = "$preferences{DB_NAME}";
+		my $database = "dbname=$dbName";
+		my $dbHost = "host=$preferences{DB_HOST}";
+		my $dbPort = "port=$preferences{DB_PORT}";
+		my $dsn = "DBI:$dbDriver:$database;$dbHost;$dbPort";
+		my $dbUser = "$preferences{DB_USER}";
+		my $dbPassword = "$preferences{DB_PASSWORD}";
+		my $dbTableEmployee = "$preferences{DB_TABLE_EMPLOYEE}";
+		my $dbTableDepartment = "$preferences{DB_TABLE_DEPARTMENT}";
+		my $dbTableCompany = "$preferences{DB_TABLE_COMPANY}";
+		my $dbh = DBI->connect($dsn, $dbUser, $dbPassword, {RaiseError => 1}) 
+			or die($DBI::errstr);
+		$argStructure{DBI} = $dbh;
+		$argStructure{DBTE} = $dbTableEmployee;
+		$argStructure{DBTD} = $dbTableDepartment;
+		$argStructure{DBTC} = $dbTableCompany;
+		$argStructure{OPT} = \%opt;
+		if("$opt{OPS}" eq "ADD_USER") {
+			$status = adduser(\%argStructure);
+			if($status == $NOT_SUCCESS) {
+				exit(138);
 			}
-		} elsif((defined($ops{FNAME})) && (defined($ops{NAME}))) {
-			if("$ops{ADD}" eq "user2group") {
-				$status = userToGroup($dbh, \%ops);
-				if($status == $NOT_SUCCESS) {
-					exit(140);
-				}
+		} elsif("$opt{OPS}" eq "ADD_DEPARTMENT") {
+			$status = adddepartment(\%argStructure);
+			if($status == $NOT_SUCCESS) {
+				exit(139);
 			}
-		}
-	} elsif("$ops{OPS}" eq "DEL") {
-		if("$ops{DEL}" eq "user") {
-			$status = delUser($dbh, $ops{NAME});
+		} elsif("$opt{OPS}" eq "ADD_USER_TO_GROUP") {
+			$status = usertogroup(\%argStructure);
+			if($status == $NOT_SUCCESS) {
+				exit(140);
+			}
+		} elsif("$opt{OPS}" eq "DEL_USER") {
+			$status = deluser(\%argStructure);
 			if($status == $NOT_SUCCESS) {
 				exit(141);
 			}
-		} elsif("$ops{DEL}" eq "department") {
-			$status = delDepartment($dbh, $ops{NAME});
+		} elsif("$opt{OPS}" eq "DEL_DEPARTMENT") {
+			$status = deldepartment(\%argStructure);
 			if($status == $NOT_SUCCESS) {
 				exit(142);
 			}
-		}
-	} elsif("$ops{OPS}" eq "LIST") {
-		if("$ops{LIST}" eq "users") {
-			$status = listEmployees($dbh);
+		} elsif("$opt{OPS}" eq "LIST_USERS") {
+			$status = listemployees(\%argStructure);
 			if($status == $NOT_SUCCESS) {
 				exit(143);
 			}
-		} elsif("$ops{LIST}" eq "departments") {
-			$status = listDepartments($dbh);
+		} elsif("$opt{OPS}" eq "LIST_DEPARTMENTS") {
+			$status = listdepartments(\%argStructure);
 			if($status == $NOT_SUCCESS) {
 				exit(144);
 			}
-		} elsif("$ops{LIST}" eq "all") {
-			$status = listAll($dbh);
+		}  elsif("$opt{OPS}" eq "LIST_ALL") {
+			$status = listall(\%argStructure);
 			if($status == $NOT_SUCCESS) {
 				exit(145);
 			}
+		} else {
+			exit(146);
 		}
-	} else {
-		exit(146);
+		$dbh->disconnect();
+		exit(0);
 	}
-	$dbh->disconnect();
-	exit(0);
+	exit(137);
 }
 
 #
@@ -188,7 +186,8 @@ if (@ARGV > 0) {
 		'del=s'  => \$del,
 		'list=s' => \$list,
 		'help|?' => \$help,
-		'manual' => \$man) or pod2usage(2);
+		'manual' => \$man
+	) or pod2usage(2);
 }
 
 my $username = (getpwuid($>));
@@ -202,9 +201,8 @@ if(($username eq "root") && ($uid == 0)) {
 	} else {
 		if((defined($add)) || (defined($del)) || (defined($list))) {
 			if((defined($add)) && ((defined($name)))) {
-				$dbarg{OPS}="ADD";
 				if("$add" eq "user") {
-					$dbarg{ADD}="user";
+					$dbarg{OPS}="ADD_USER";
 					if((defined($fname)) && (defined($name)) && (defined($udid))) {
 						$dbarg{FNAME}="$fname";
 						$dbarg{NAME}="$name";
@@ -213,7 +211,7 @@ if(($username eq "root") && ($uid == 0)) {
 						exit(128);
 					}
 				} elsif("$add" eq "department") {
-					$dbarg{ADD}="department";
+					$dbarg{OPS}="ADD_DEPARTMENT";
 					if((defined($name)) && (defined($udid))) {
 						$dbarg{NAME}="$name";
 						$dbarg{UDID}="$udid";
@@ -221,7 +219,7 @@ if(($username eq "root") && ($uid == 0)) {
 						exit(129);
 					}
 				} elsif("$add" eq "user2group") {
-					$dbarg{ADD}="user2group";
+					$dbarg{OPS}="ADD_USER_TO_GROUP";
 					if((defined($fname)) && (defined($name))) {
 						$dbarg{FNAME}="$fname";
 						$dbarg{NAME}="$name";
@@ -232,16 +230,15 @@ if(($username eq "root") && ($uid == 0)) {
 					exit(131);
 				}
 			} elsif(defined($del)) {
-				$dbarg{OPS}="DEL";
 				if("$del" eq "user") {
-					$dbarg{DEL}="user";
+					$dbarg{OPS}="DEL_USER";
 					if(defined($name)) {
 						$dbarg{NAME}="$name";
 					} else {
 						exit(132);
 					}
 				} elsif("$del" eq "department") {
-					$dbarg{DEL}="department";
+					$dbarg{OPS}="DEL_DEPARTMENT";
 					if(defined($name)) {
 						$dbarg{NAME}="$name";
 					} else {
@@ -251,13 +248,12 @@ if(($username eq "root") && ($uid == 0)) {
 					exit(134);
 				}
 			} elsif(defined($list)) {
-				$dbarg{OPS}="LIST";
 				if("$list" eq "users") {
-					$dbarg{LIST}="users";
+					$dbarg{OPS}="LIST_USERS";
 				} elsif("$list" eq "departments") {
-					$dbarg{LIST}="departments";
+					$dbarg{OPS}="LIST_DEPARTMENTS";
 				} elsif("$list" eq "all") {
-					$dbarg{LIST}="all";
+					$dbarg{OPS}="LIST_ALL";
 				} else {
 					exit(135);
 				}
@@ -290,13 +286,13 @@ Use:
 Examples:
 
     # Add operation examples
-    dbmanager --add department --name developer -udid 701
-    dbmanager --add user --fname "Vladimir Roncevic" --name vroncevic -udid 1034
-    dbmanager --add user2group --fname developer --name vroncevic
+    dbmanager --add department --name IT -udid 1000
+    dbmanager --add user --fname "Vladimir Roncevic" --name vroncevic -udid 10001
+    dbmanager --add user2group --fname IT --name vroncevic
     
     # Delete operation examples
     dbmanager --del user --name vroncevic
-    dbmanager --del department --name developer
+    dbmanager --del department --name IT
     
     # List operation examples
     dbmanager --list users

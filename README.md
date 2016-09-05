@@ -44,6 +44,7 @@ This module requires these other modules and libraries:
 	Getopt::Long
 	File::Basename
 	Pod::Usage
+	Text::Table
 	Logging (from perl-util project)
 	Configuration (from perl-util project)
 	Notification (from perl-util project)

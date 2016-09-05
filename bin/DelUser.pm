@@ -1,6 +1,6 @@
 package DelUser;
 #
-# @brief    Delete user by username
+# @brief    Delete user from database/table by username
 # @version  ver.1.0
 # @date     Mon Aug 22 16:09:02 CEST 2016
 # @company  Frobas IT Department, www.frobas.com 2016
@@ -11,6 +11,7 @@ use strict;
 use warnings;
 use Exporter;
 use DBI;
+use GetEid qw(geteid);
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(dirname(abs_path($0))) . '/../../lib/perl5';
@@ -18,23 +19,23 @@ use Status;
 our @ISA = qw(Exporter);
 our %EXPORT_TAGS = ('all' => [qw()]);
 our @EXPORT_OK = (@{$EXPORT_TAGS{'all'}});
-our @EXPORT = qw(delUser);
+our @EXPORT = qw(deluser);
 our $VERSION = '1.0';
-our $TOOL_DBG="false";
+our $TOOL_DBG = "false";
 
 #
-# @brief   Delete user by username
-# @params  Values required database handler and username
+# @brief   Delete user from database/table by username
+# @param   Value required argument structure
 # @retval  Success 0, else 1
 #
 # @usage
 # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 # 
-# use DelUser qw(delUser);
+# use DelUser qw(deluser);
 #
 # ...
 # 
-# my $status = delUser($dbh, $username);
+# my $status = deluser(\%argStructure);
 #
 # if ($status == $SUCCESS) {
 #	# true
@@ -46,55 +47,48 @@ our $TOOL_DBG="false";
 #	# exit 128
 # }
 #
-sub delUser {
+sub deluser {
 	my $fCaller = (caller(0))[3];
-	my $msg="None";
-	my $dbHandler = $_[0];
-	my $username = $_[1];
-	if((defined($dbHandler)) && (defined($username))) {
-		my $stmtEid = qq(
-			SELECT employee_info.eid FROM employee_info 
-			WHERE employee_info.username=\'$username\';
-		);
-		my $sthEid = $dbHandler->prepare($stmtEid);
-		my $rvEid = $sthEid->execute() or die($DBI::errstr);
-		if($rvEid < 0){
-			print($DBI::errstr);
-		}
-		my $eidRef = $sthEid->fetchrow_hashref();
-		my $eid = 0;
-		$eid = $eidRef->{eid};
-		if($eid == 0) {
-			$msg="Failed to get employee ID";
+	my $msg = "None";
+	my %argStructure = %{$_[0]};
+	if(%argStructure) {
+		my $eid;
+		if(geteid(\%argStructure, \$eid) == $SUCCESS) {
+			$msg = "Delete from table [$argStructure{DBTC}]";
 			if("$TOOL_DBG" eq "true") {
 				print("[Info] " . $fCaller . " " . $msg . "\n");
 			}
-			return ($NOT_SUCCESS);
+			my $stmtDelEid = qq (
+				DELETE FROM $argStructure{DBTC} 
+				WHERE $argStructure{DBTC}.eid = $eid;
+			);
+			my $sthDelEid = $argStructure{DBI}->prepare($stmtDelEid);
+			my $rvDelEid = $sthDelEid->execute() or die($DBI::errstr);
+			if($rvDelEid < 0){
+				print($DBI::errstr);
+			}
+			$msg = "Delete from table [$argStructure{DBTE}]";
+			if("$TOOL_DBG" eq "true") {
+				print("[Info] " . $fCaller . " " . $msg . "\n");
+			}
+			my $stmtDelEmployee = qq (
+				DELETE FROM $argStructure{DBTE} 
+				WHERE $argStructure{DBTE}.eid = $eid;
+			);
+			my $sthDelEmployee = $argStructure{DBI}->prepare($stmtDelEmployee);
+			my $rvDelEmployee = $sthDelEmployee->execute() or die($DBI::errstr);
+			if($rvDelEmployee < 0){
+				print($DBI::errstr);
+			}
+			$msg="Done";
+			if("$TOOL_DBG" eq "true") {
+				print("[Info] " . $fCaller . " " . $msg . "\n");
+			}
+			return ($SUCCESS);
 		}
-		my $stmtDelFromCompany = qq(
-			DELETE FROM company WHERE company.eid=$eid;
-		);
-		my $sthDelFromCompany = $dbHandler->prepare($stmtDelFromCompany);
-		my $rvDelFromCompany = $sthDelFromCompany->execute() or 
-			die($DBI::errstr);
-		if($rvDelFromCompany < 0){
-			print($DBI::errstr);
-		}
-		my $stmtDelUser = qq(
-			DELETE FROM employee_info WHERE employee_info.eid=$eid;
-		);
-		my $sthDelUser = $dbHandler->prepare($stmtDelUser);
-		my $rvDelUser = $sthDelUser->execute() or die($DBI::errstr);
-		if($rvDelUser < 0){
-			print($DBI::errstr);
-		}
-		$msg="Done";
-        if("$TOOL_DBG" eq "true") {
-			print("[Info] " . $fCaller . " " . $msg . "\n");
-        }
-		return ($SUCCESS);
+		return ($NOT_SUCCESS);
 	}
-	$msg = "Check argument(s) [DB_HANDLER] and [DB_USERNAME]";
+	$msg = "Check argument [ARGUMENT_STRUCTURE]";
     print("[Error] " . $fCaller . " " . $msg . "\n");
 	return ($NOT_SUCCESS);
 } 
@@ -104,15 +98,15 @@ __END__
 
 =head1 NAME
 
-DelUser - Delete user by username
+DelUser - Delete user from database/table by username
 
 =head1 SYNOPSIS
 
-	use DelUser qw(delUser);
+	use DelUser qw(deluser);
 
 	...
 
-	my $status = delUser($dbh, $username);
+	my $status = deluser(\%argStructure);
 
 	if ($status == $SUCCESS) {
 		# true
@@ -126,11 +120,11 @@ DelUser - Delete user by username
 
 =head1 DESCRIPTION
 
-Delete user
+Delete user from database/table by username
 
 =head2 EXPORT
 
-delUser - return 0 for success, else return 1
+deluser - return 0 for success, else return 1
 
 =head1 AUTHOR
 

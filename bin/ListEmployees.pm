@@ -1,6 +1,6 @@
 package ListEmployees;
 #
-# @brief    List employees
+# @brief    List employees from database/table
 # @version  ver.1.0
 # @date     Mon Aug 22 16:09:02 CEST 2016
 # @company  Frobas IT Department, www.frobas.com 2016
@@ -19,23 +19,23 @@ use Status;
 our @ISA = qw(Exporter);
 our %EXPORT_TAGS = ('all' => [qw()]);
 our @EXPORT_OK = (@{$EXPORT_TAGS{'all'}});
-our @EXPORT = qw(listEmployees);
+our @EXPORT = qw(listemployees);
 our $VERSION = '1.0';
-our $TOOL_DBG="false";
+our $TOOL_DBG = "false";
 
 #
-# @brief   List employees
-# @param   Value required database handler
+# @brief   List employees from database/table
+# @param   Value required argument structure
 # @retval  Success 0, else 1
 #
 # @usage
 # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 # 
-# use ListEmployees qw(listEmployees);
+# use ListEmployees qw(listemployees);
 #
 # ...
 #
-# my $status = listEmployees($dbh);
+# my $status = listemployees(\%argStructure);
 #
 # if ($status == $SUCCESS) {
 #	# true
@@ -47,45 +47,50 @@ our $TOOL_DBG="false";
 #	# exit 128
 # }
 #
-sub listEmployees {
+sub listemployees {
 	my $fCaller = (caller(0))[3];
-	my $msg="None";
-	my $dbHandler = $_[0];
-	if(defined($dbHandler)) {
-		my $tbl = Text::Table->new(
+	my $msg = "None";
+	my %argStructure = %{$_[0]};
+	if(%argStructure) {
+		my $table = Text::Table->new(
 			"Employee ID",
 			"Full name",
 			"User name",
 			"User ID"
 		);
-		my $stmtListUsers = qq(
-			SELECT employee_info.eid, 
-			employee_info.fullname, 
-			employee_info.username, 
-			employee_info.uid FROM employee_info;
+		$msg = "Select from table [$argStructure{DBTE}]";
+		if("$TOOL_DBG" eq "true") {
+			print("[Info] " . $fCaller . " " . $msg . "\n");
+		}
+		my $stmtListEmployees = qq (
+			SELECT $argStructure{DBTE}.eid, 
+			$argStructure{DBTE}.fullname, 
+			$argStructure{DBTE}.username, 
+			$argStructure{DBTE}.uid 
+			FROM $argStructure{DBTE};
 		);
-		my $sthListUsers = $dbHandler->prepare($stmtListUsers);
-		my $rvListUsers = $sthListUsers->execute() or die($DBI::errstr);
-		if($rvListUsers < 0){
+		my $sthListEmployees = $argStructure{DBI}->prepare($stmtListEmployees);
+		my $rvListEmployees = $sthListEmployees->execute() or die($DBI::errstr);
+		if($rvListEmployees < 0){
 			print($DBI::errstr);
 		}
-		while(my @listUsers = $sthListUsers->fetchrow_array()) {
-			$tbl->add(
-				$listUsers[0], 
-				$listUsers[1], 
-				$listUsers[2], 
-				$listUsers[3]
+		while(my @listEmployees = $sthListEmployees->fetchrow_array()) {
+			$table->add(
+				$listEmployees[0], 
+				$listEmployees[1], 
+				$listEmployees[2], 
+				$listEmployees[3]
 			);
 		}
-		$tbl->add(' ');
-		print($tbl);
-		$msg="Done";
+		$table->add(' ');
+		print($table);
+		$msg = "Done";
         if("$TOOL_DBG" eq "true") {
 			print("[Info] " . $fCaller . " " . $msg . "\n");
         }
 		return ($SUCCESS);
 	}
-	$msg = "Check argument [DB_HANDLER]";
+	$msg = "Check argument [ARGUMENT_STRUCTURE]";
     print("[Error] " . $fCaller . " " . $msg . "\n");
 	return ($NOT_SUCCESS);
 } 
@@ -95,15 +100,15 @@ __END__
 
 =head1 NAME
 
-ListEmployees - List employees 
+ListEmployees - List employees from database/table
 
 =head1 SYNOPSIS
 
-	use ListEmployees qw(listEmployees);
+	use ListEmployees qw(listemployees);
 
 	...
 
-	my $status = listEmployees($dbh);
+	my $status = listemployees(\%argStructure);
 
 	if ($status == $SUCCESS) {
 		# true
@@ -117,11 +122,11 @@ ListEmployees - List employees
 
 =head1 DESCRIPTION
 
-List employees 
+List employees from database/table
 
 =head2 EXPORT
 
-listEmployees - return 0 for success, else return 1
+listemployees - return 0 for success, else return 1
 
 =head1 AUTHOR
 

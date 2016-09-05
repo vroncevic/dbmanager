@@ -1,6 +1,6 @@
 package AddDepartment;
 #
-# @brief    Add new department
+# @brief    Add new department to database/table
 # @version  ver.1.0
 # @date     Mon Aug 22 16:09:02 CEST 2016
 # @company  Frobas IT Department, www.frobas.com 2016
@@ -11,6 +11,7 @@ use strict;
 use warnings;
 use Exporter;
 use DBI;
+use GetMaxDid qw(getmaxdid);
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(dirname(abs_path($0))) . '/../../lib/perl5';
@@ -18,23 +19,23 @@ use Status;
 our @ISA = qw(Exporter);
 our %EXPORT_TAGS = ('all' => [qw()]);
 our @EXPORT_OK = (@{$EXPORT_TAGS{'all'}});
-our @EXPORT = qw(addDepartment);
+our @EXPORT = qw(adddepartment);
 our $VERSION = '1.0';
-our $TOOL_DBG="false";
+our $TOOL_DBG = "false";
 
 #
-# @brief   Add new department
-# @params  Values required database handler and hash department structure
+# @brief   Add new department to database/table
+# @param   Value required argument structure
 # @retval  Success 0, else 1
 #
 # @usage
 # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 # 
-# use AddDepartment qw(addDepartment);
+# use AddDepartment qw(adddepartment);
 #
 # ...
 #
-# my $status = addDepartment($dbh, \%ops);
+# my $status = adddepartment(\%argStructure);
 #
 # if ($status == $SUCCESS) {
 #	# true
@@ -46,83 +47,76 @@ our $TOOL_DBG="false";
 #	# exit 128
 # }
 #
-sub addDepartment {
+sub adddepartment {
 	my $fCaller = (caller(0))[3];
-	my $msg="None";
-	my $dbHandler = $_[0];
-	my %ops = %{$_[1]};
-	if((defined($dbHandler)) && (%ops)) {
-		my $stmtMaxDid = qq(
-			SELECT department_info.did
-			FROM department_info 
-			WHERE department_info.did = 
-			\(SELECT MAX\(department_info.did\) FROM department_info\);
-		);
-		my $sthMaxDid = $dbHandler->prepare($stmtMaxDid);
-		my $rvMaxDid = $sthMaxDid->execute() or die($DBI::errstr);
-		if($rvMaxDid < 0){
-			print($DBI::errstr);
-		}
-		my $maxDidRef = $sthMaxDid->fetchrow_hashref();
-		my $maxDid = 0;
-		$maxDid = $maxDidRef->{did};
-		if($maxDid == 0) {
-			print("\nFailed to get MAX ID of departments\n\n");
-			$msg="Failed to get MAX ID form department_info table";
+	my $msg = "None";
+	my %argStructure = %{$_[0]};
+	if(%argStructure) {
+		my $maxDid;
+		if(getmaxdid(\%argStructure, \$maxDid) == $SUCCESS) {
+			$msg = "Select from table [$argStructure{DBTD}]";
 			if("$TOOL_DBG" eq "true") {
 				print("[Info] " . $fCaller . " " . $msg . "\n");
 			}
-			return ($NOT_SUCCESS);
-		}
-		my $stmtGetDnid = qq(
-			SELECT department_info.did, department_info.department,
-			department_info.gid FROM department_info;
-		);
-		my $sthDnid = $dbHandler->prepare($stmtGetDnid);
-		my $rvDnid = $sthDnid->execute() or die($DBI::errstr);
-		if($rvDnid < 0){
-			print($DBI::errstr);
-		}
-		my @dnid;
-		my @existingDids;
-		while(@dnid = $sthDnid->fetchrow_array()) {
-			if(("$ops{NAME}" eq "$dnid[1]") || ("$ops{UDID}" eq "$dnid[2]")) {
-				$msg = "Department $ops{NAME} (ID $ops{UDID}) already exist";
-				print("\n" . $msg . "\n\n");
-				return ($NOT_SUCCESS);
+			my $stmtGetDnid = qq (
+				SELECT $argStructure{DBTD}.did, 
+				$argStructure{DBTD}.department,
+				$argStructure{DBTD}.gid 
+				FROM $argStructure{DBTD};
+			);
+			my $sthDnid = $argStructure{DBI}->prepare($stmtGetDnid);
+			my $rvDnid = $sthDnid->execute() or die($DBI::errstr);
+			if($rvDnid < 0){
+				print($DBI::errstr);
 			}
-			push(@existingDids, $dnid[0]);
-		}
-		my $i;
-		my @missingDids;
-		foreach (@existingDids) {
-			if ($_ != ++$i) {
-				push(@missingDids, $i .. $_ - 1);
-				$i = $_;
+			my @dnid;
+			my @existingDids;
+			my $dname = "$argStructure{NAME}";
+			my $udid = "$argStructure{UDID}";
+			while(@dnid = $sthDnid->fetchrow_array()) {
+				if(("$dname" eq "$dnid[1]") || ("$udid" eq "$dnid[2]")) {
+					$msg = "Department $dname (ID $udid) already exist";
+					print("[Info] " . $fCaller . " " . $msg . "\n");
+					return ($NOT_SUCCESS);
+				}
+				push(@existingDids, $dnid[0]);
 			}
+			my $i;
+			my @missingDids;
+			foreach (@existingDids) {
+				if ($_ != ++$i) {
+					push(@missingDids, $i .. $_ - 1);
+					$i = $_;
+				}
+			}
+			if(defined($missingDids[0])) {
+				$maxDid = $missingDids[0];
+			} else {
+				$maxDid = $maxDid + 1;
+			}
+			$msg = "Insert to table [$argStructure{DBTD}]";
+			if("$TOOL_DBG" eq "true") {
+				print("[Info] " . $fCaller . " " . $msg . "\n");
+			}
+			my $stmtAddDepartment = qq (
+				INSERT INTO $argStructure{DBTD} \(did, department, gid\)
+				VALUES \($maxDid , \'$dname\', $udid\);
+			);
+			my $sthAddDepartment = $argStructure{DBI}->prepare($stmtAddDepartment);
+			my $rvAddDepartment = $sthAddDepartment->execute() or 
+				die($DBI::errstr);
+			if($rvAddDepartment < 0){
+				print($DBI::errstr);
+			}
+			$msg = "Done";
+			if("$TOOL_DBG" eq "true") {
+				print("[Info] " . $fCaller . " " . $msg . "\n");
+			}
+			return ($SUCCESS);
 		}
-		if(defined($missingDids[0])) {
-			$maxDid = $missingDids[0];
-		} else {
-			$maxDid = $maxDid + 1;
-		}
-		my $stmtAddDepartment = qq(
-			INSERT INTO department_info \(did, department, gid\)
-			VALUES \($maxDid , \'$ops{NAME}\', $ops{UDID}\);
-		);
-		my $sthAddDepartment = $dbHandler->prepare($stmtAddDepartment);
-		my $rvAddDepartment = $sthAddDepartment->execute() or 
-			die($DBI::errstr);
-		if($rvAddDepartment < 0){
-			print($DBI::errstr);
-		}
-		$msg="Done";
-        if("$TOOL_DBG" eq "true") {
-			print("[Info] " . $fCaller . " " . $msg . "\n");
-        }
-		return ($SUCCESS);
+		return ($NOT_SUCCESS);
 	}
-	$msg = "Check argument(s) [DB_HANDLER] and [NEW_DEPARTMENT_STRUCTURE]";
+	$msg = "Check argument [ARGUMENT_STRUCTURE]";
     print("[Error] " . $fCaller . " " . $msg . "\n");
 	return ($NOT_SUCCESS);
 } 
@@ -132,15 +126,15 @@ __END__
 
 =head1 NAME
 
-AddDepartment - Add new department
+AddDepartment - Add new department to database/table
 
 =head1 SYNOPSIS
 
-	use AddDepartment qw(addDepartment);
+	use AddDepartment qw(adddepartment);
 
 	...
 
-	my $status = addDepartment($dbh, \%ops);
+	my $status = adddepartment(\%argStructure);
 
 	if ($status == $SUCCESS) {
 		# true
@@ -154,11 +148,11 @@ AddDepartment - Add new department
 
 =head1 DESCRIPTION
 
-Add new department
+Add new department to database/table
 
 =head2 EXPORT
 
-addDepartment - return 0 for success, else return 1
+adddepartment - return 0 for success, else return 1
 
 =head1 AUTHOR
 

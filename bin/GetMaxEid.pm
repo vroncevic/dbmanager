@@ -1,6 +1,6 @@
-package ListAll;
+package GetMaxEid;
 #
-# @brief    List all details from database/table
+# @brief    Get max employee id from database/table
 # @version  ver.1.0
 # @date     Mon Aug 22 16:09:02 CEST 2016
 # @company  Frobas IT Department, www.frobas.com 2016
@@ -11,7 +11,6 @@ use strict;
 use warnings;
 use Exporter;
 use DBI;
-use Text::Table;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(dirname(abs_path($0))) . '/../../lib/perl5';
@@ -19,23 +18,23 @@ use Status;
 our @ISA = qw(Exporter);
 our %EXPORT_TAGS = ('all' => [qw()]);
 our @EXPORT_OK = (@{$EXPORT_TAGS{'all'}});
-our @EXPORT = qw(listall);
+our @EXPORT = qw(getmaxeid);
 our $VERSION = '1.0';
 our $TOOL_DBG = "false";
 
 #
-# @brief   List all details from database/table
-# @param   Value required argument structure
+# @brief   Get max employee id from database/table
+# @params  Values required argument structure, and max eid [output]
 # @retval  Success 0, else 1
 #
 # @usage
 # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 # 
-# use ListAll qw(listall);
+# use GetMaxEid qw(getmaxeid);
 #
 # ...
 #
-# my $status = listall(\%argStructure);
+# my $status = getmaxeid(\%argStructure, \$maxEid);
 #
 # if ($status == $SUCCESS) {
 #	# true
@@ -47,54 +46,38 @@ our $TOOL_DBG = "false";
 #	# exit 128
 # }
 #
-sub listall {
+sub getmaxeid {
 	my $fCaller = (caller(0))[3];
 	my $msg = "None";
 	my %argStructure = %{$_[0]};
+	my $finalMaxEid = $_[1];
 	if(%argStructure) {
-		my $table = Text::Table->new(
-			"Employee ID",
-			"Full name",
-			"User name",
-			"Department",
-			"User ID",
-			"Group ID"
-		);
-		$msg = "Select from table [$argStructure{DBTC}]";
+		$msg = "Select from table [$argStructure{DBTE}]";
         if("$TOOL_DBG" eq "true") {
 			print("[Info] " . $fCaller . " " . $msg . "\n");
         }
-		my $stmtListAll = qq (
-			SELECT $argStructure{DBTE}.eid, 
-			$argStructure{DBTE}.fullname, 
-			$argStructure{DBTE}.username, 
-			$argStructure{DBTD}.department, 
-			$argStructure{DBTE}.uid, 
-			$argStructure{DBTD}.gid 
-			FROM $argStructure{DBTE}
-			INNER JOIN $argStructure{DBTC} 
-			ON \($argStructure{DBTE}.eid = $argStructure{DBTC}.eid\)
-			INNER JOIN $argStructure{DBTD} 
-			ON \($argStructure{DBTD}.did = $argStructure{DBTC}.did\);
+		my $stmtMaxEid = qq (
+			SELECT $argStructure{DBTE}.eid
+			FROM $argStructure{DBTE} 
+			WHERE $argStructure{DBTE}.eid = 
+			\(SELECT MAX\($argStructure{DBTE}.eid\) 
+			FROM $argStructure{DBTE}\);
 		);
-		my $sthListAll = $argStructure{DBI}->prepare($stmtListAll);
-		my $rvListAll = $sthListAll->execute() or die($DBI::errstr);
-		if($rvListAll < 0){
+		my $sthMaxEid = $argStructure{DBI}->prepare($stmtMaxEid);
+		my $rvMaxEid = $sthMaxEid->execute() or die($DBI::errstr);
+		if($rvMaxEid < 0) {
 			print($DBI::errstr);
 		}
-		while(my @listAllDetails = $sthListAll->fetchrow_array()) {
-			$table->add(
-				$listAllDetails[0], 
-				$listAllDetails[1], 
-				$listAllDetails[2], 
-				$listAllDetails[3], 
-				$listAllDetails[4], 
-				$listAllDetails[5]
-			);
+		my $maxEidRef = $sthMaxEid->fetchrow_hashref();
+		my $maxEid = 0;
+		$maxEid = $maxEidRef->{eid};
+		if($maxEid == 0) {
+			$msg="Failed to get max employee id from database/table";
+			print("[Error] " . $fCaller . " " . $msg . "\n");
+			return ($NOT_SUCCESS);
 		}
-		$table->add(' ');
-		print($table);
-		$msg="Done";
+		${$finalMaxEid} = $maxEid;
+		$msg = "Done";
         if("$TOOL_DBG" eq "true") {
 			print("[Info] " . $fCaller . " " . $msg . "\n");
         }
@@ -110,15 +93,15 @@ __END__
 
 =head1 NAME
 
-ListAll - List all details from database/table
+GetMaxEid - Get max employee id from database/table
 
 =head1 SYNOPSIS
 
-	use ListAll qw(listAll);
+	use GetMaxEid qw(getmaxeid);
 
 	...
 
-	my $status = listAll(\%argStructure);
+	my $status = getmaxeid(\%argStructure, \$maxEid);
 
 	if ($status == $SUCCESS) {
 		# true
@@ -132,11 +115,11 @@ ListAll - List all details from database/table
 
 =head1 DESCRIPTION
 
-List all details from database/table
+Get max employee id from database/table
 
 =head2 EXPORT
 
-listall - return 0 for success, else return 1
+getmaxeid - return 0 for success, else return 1
 
 =head1 AUTHOR
 

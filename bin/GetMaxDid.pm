@@ -1,6 +1,6 @@
-package ListAll;
+package GetMaxDid;
 #
-# @brief    List all details from database/table
+# @brief    Get max department id from database/table
 # @version  ver.1.0
 # @date     Mon Aug 22 16:09:02 CEST 2016
 # @company  Frobas IT Department, www.frobas.com 2016
@@ -11,7 +11,6 @@ use strict;
 use warnings;
 use Exporter;
 use DBI;
-use Text::Table;
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(dirname(abs_path($0))) . '/../../lib/perl5';
@@ -19,23 +18,23 @@ use Status;
 our @ISA = qw(Exporter);
 our %EXPORT_TAGS = ('all' => [qw()]);
 our @EXPORT_OK = (@{$EXPORT_TAGS{'all'}});
-our @EXPORT = qw(listall);
+our @EXPORT = qw(getmaxdid);
 our $VERSION = '1.0';
 our $TOOL_DBG = "false";
 
 #
-# @brief   List all details from database/table
-# @param   Value required argument structure
+# @brief   Get max department id from database/table
+# @params  Values required argument structure, and max did [output]
 # @retval  Success 0, else 1
 #
 # @usage
 # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 # 
-# use ListAll qw(listall);
+# use GetMaxDid qw(getmaxdid);
 #
 # ...
 #
-# my $status = listall(\%argStructure);
+# my $status = getmaxdid(\%argStructure, \$maxDid);
 #
 # if ($status == $SUCCESS) {
 #	# true
@@ -47,54 +46,38 @@ our $TOOL_DBG = "false";
 #	# exit 128
 # }
 #
-sub listall {
+sub getmaxdid {
 	my $fCaller = (caller(0))[3];
 	my $msg = "None";
 	my %argStructure = %{$_[0]};
+	my $finalMaxDid = $_[1];
 	if(%argStructure) {
-		my $table = Text::Table->new(
-			"Employee ID",
-			"Full name",
-			"User name",
-			"Department",
-			"User ID",
-			"Group ID"
-		);
-		$msg = "Select from table [$argStructure{DBTC}]";
+		$msg = "Select from table [$argStructure{DBTD}]";
         if("$TOOL_DBG" eq "true") {
 			print("[Info] " . $fCaller . " " . $msg . "\n");
         }
-		my $stmtListAll = qq (
-			SELECT $argStructure{DBTE}.eid, 
-			$argStructure{DBTE}.fullname, 
-			$argStructure{DBTE}.username, 
-			$argStructure{DBTD}.department, 
-			$argStructure{DBTE}.uid, 
-			$argStructure{DBTD}.gid 
-			FROM $argStructure{DBTE}
-			INNER JOIN $argStructure{DBTC} 
-			ON \($argStructure{DBTE}.eid = $argStructure{DBTC}.eid\)
-			INNER JOIN $argStructure{DBTD} 
-			ON \($argStructure{DBTD}.did = $argStructure{DBTC}.did\);
+		my $stmtMaxDid = qq (
+			SELECT $argStructure{DBTD}.did
+			FROM $argStructure{DBTD} 
+			WHERE $argStructure{DBTD}.did = 
+			\(SELECT MAX\($argStructure{DBTD}.did\) 
+			FROM $argStructure{DBTD}\);
 		);
-		my $sthListAll = $argStructure{DBI}->prepare($stmtListAll);
-		my $rvListAll = $sthListAll->execute() or die($DBI::errstr);
-		if($rvListAll < 0){
+		my $sthMaxDid = $argStructure{DBI}->prepare($stmtMaxDid);
+		my $rvMaxDid = $sthMaxDid->execute() or die($DBI::errstr);
+		if($rvMaxDid < 0) {
 			print($DBI::errstr);
 		}
-		while(my @listAllDetails = $sthListAll->fetchrow_array()) {
-			$table->add(
-				$listAllDetails[0], 
-				$listAllDetails[1], 
-				$listAllDetails[2], 
-				$listAllDetails[3], 
-				$listAllDetails[4], 
-				$listAllDetails[5]
-			);
+		my $maxDidRef = $sthMaxDid->fetchrow_hashref();
+		my $maxDid = 0;
+		$maxDid = $maxDidRef->{did};
+		if($maxDid == 0) {
+			$msg="Failed to get max department id from database/table";
+			print("[Error] " . $fCaller . " " . $msg . "\n");
+			return ($NOT_SUCCESS);
 		}
-		$table->add(' ');
-		print($table);
-		$msg="Done";
+		${$finalMaxDid} = $maxDid;
+		$msg = "Done";
         if("$TOOL_DBG" eq "true") {
 			print("[Info] " . $fCaller . " " . $msg . "\n");
         }
@@ -110,15 +93,15 @@ __END__
 
 =head1 NAME
 
-ListAll - List all details from database/table
+GetMaxDid - Get max department id from database/table
 
 =head1 SYNOPSIS
 
-	use ListAll qw(listAll);
+	use GetMaxDid qw(getmaxdid);
 
 	...
 
-	my $status = listAll(\%argStructure);
+	my $status = getmaxdid(\%argStructure, \$maxDid);
 
 	if ($status == $SUCCESS) {
 		# true
@@ -132,11 +115,11 @@ ListAll - List all details from database/table
 
 =head1 DESCRIPTION
 
-List all details from database/table
+Get max department id from database/table
 
 =head2 EXPORT
 
-listall - return 0 for success, else return 1
+getmaxdid - return 0 for success, else return 1
 
 =head1 AUTHOR
 

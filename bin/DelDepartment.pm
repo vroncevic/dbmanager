@@ -1,6 +1,6 @@
 package DelDepartment;
 #
-# @brief    Delete department by department name
+# @brief    Delete department from database/table by department name
 # @version  ver.1.0
 # @date     Mon Aug 22 16:09:02 CEST 2016
 # @company  Frobas IT Department, www.frobas.com 2016
@@ -11,6 +11,7 @@ use strict;
 use warnings;
 use Exporter;
 use DBI;
+use GetDid qw(getdid);
 use File::Basename qw(dirname);
 use Cwd qw(abs_path);
 use lib dirname(dirname(abs_path($0))) . '/../../lib/perl5';
@@ -18,23 +19,23 @@ use Status;
 our @ISA = qw(Exporter);
 our %EXPORT_TAGS = ('all' => [qw()]);
 our @EXPORT_OK = (@{$EXPORT_TAGS{'all'}});
-our @EXPORT = qw(delDepartment);
+our @EXPORT = qw(deldepartment);
 our $VERSION = '1.0';
 our $TOOL_DBG="false";
 
 #
-# @brief   Delete department by department name
-# @params  Values required database handler and department name
+# @brief   Delete department from database/table by department name
+# @param   Value required argument structure
 # @retval  Success 0, else 1
 #
 # @usage
 # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 # 
-# use DelDepartment qw(delDepartment);
+# use DelDepartment qw(deldepartment);
 #
 # ...
 # 
-# my $status = delDepartment($dbh, $department);
+# my $status = deldepartment(\%argStructure);
 #
 # if ($status == $SUCCESS) {
 #	# true
@@ -46,54 +47,48 @@ our $TOOL_DBG="false";
 #	# exit 128
 # }
 #
-sub delDepartment {
+sub deldepartment {
 	my $fCaller = (caller(0))[3];
-	my $msg="None";
-	my $dbHandler = $_[0];
-	my $department = $_[1];
-	if((defined($dbHandler)) && (defined($department))) {
-		my $stmtDid = qq(
-			SELECT department_info.did FROM department_info 
-			WHERE department_info.department=\'$department\';
-		);
-		my $sthDid = $dbHandler->prepare($stmtDid);
-		my $rvDid = $sthDid->execute() or die($DBI::errstr);
-		if($rvDid < 0){
-			print($DBI::errstr);
-		}
-		my $didRef = $sthDid->fetchrow_hashref();
-		my $did = 0;
-		$did = $didRef->{did};
-		if($did == 0) {
-			$msg="Failed to get department ID";
+	my $msg = "None";
+	my %argStructure = %{$_[0]};
+	if(%argStructure) {
+		my $did;
+		if(getdid(\%argStructure, \$did) == $SUCCESS) {
+			$msg = "Delete from table [$argStructure{DBTC}]";
 			if("$TOOL_DBG" eq "true") {
 				print("[Info] " . $fCaller . " " . $msg . "\n");
 			}
-			return ($NOT_SUCCESS);
+			my $stmtDelDid = qq (
+				DELETE FROM $argStructure{DBTC} 
+				WHERE $argStructure{DBTC}.did=$did;
+			);
+			my $sthDelDid = $argStructure{DBI}->prepare($stmtDelDid);
+			my $rvDelDid = $sthDelDid->execute() or die($DBI::errstr);
+			if($rvDelDid < 0) {
+				print($DBI::errstr);
+			}
+			$msg = "Delete from table [$argStructure{DBTD}]";
+			if("$TOOL_DBG" eq "true") {
+				print("[Info] " . $fCaller . " " . $msg . "\n");
+			}
+			my $stmtDelDepartment = qq (
+				DELETE FROM $argStructure{DBTD} 
+				WHERE $argStructure{DBTD}.did=$did;
+			);
+			my $sthDelDepartment = $argStructure{DBI}->prepare($stmtDelDepartment);
+			my $rvDepartment = $sthDelDepartment->execute() or die($DBI::errstr);
+			if($rvDepartment < 0) {
+				print($DBI::errstr);
+			}
+			$msg = "Done";
+			if("$TOOL_DBG" eq "true") {
+				print("[Info] " . $fCaller . " " . $msg . "\n");
+			}
+			return ($SUCCESS);
 		}
-		my $stmtDelCompany = qq(
-			DELETE FROM company WHERE company.did=$did;
-		);
-		my $sthCompany = $dbHandler->prepare($stmtDelCompany);
-		my $rvCompany = $sthCompany->execute() or die($DBI::errstr);
-		if($rvCompany < 0) {
-			print($DBI::errstr);
-		}
-		my $stmtDelDepartment = qq(
-			DELETE FROM department_info WHERE department_info.did=$did;
-		);
-		my $sthDelDepartment = $dbHandler->prepare($stmtDelDepartment);
-		my $rvDepartment = $sthDelDepartment->execute() or die($DBI::errstr);
-		if($rvDepartment < 0) {
-			print($DBI::errstr);
-		}
-		$msg="Done";
-        if("$TOOL_DBG" eq "true") {
-			print("[Info] " . $fCaller . " " . $msg . "\n");
-        }
-		return ($SUCCESS);
+		return ($NOT_SUCCESS);
 	}
-	$msg = "Check argument(s) [DB_HANDLER] and [DB_DEPARTMENT_NAME]";
+	$msg = "Check argument [ARGUMENT_STRUCTURE]";
     print("[Error] " . $fCaller . " " . $msg . "\n");
 	return ($NOT_SUCCESS);
 }
@@ -103,15 +98,15 @@ __END__
 
 =head1 NAME
 
-DelDepartment - Delete department by department name
+DelDepartment - Delete department from database/table by department name
 
 =head1 SYNOPSIS
 
-	use DelDepartment qw(delDepartment);
+	use DelDepartment qw(deldepartment);
 
 	...
 
-	my $status = delDepartment($dbh, $department);
+	my $status = deldepartment(\%argStructure);
 
 	if ($status == $SUCCESS) {
 		# true
@@ -125,11 +120,11 @@ DelDepartment - Delete department by department name
 
 =head1 DESCRIPTION
 
-Delete department by department name
+Delete department from database/table by department name
 
 =head2 EXPORT
 
-delDepartment - return 0 for success, else return 1
+deldepartment - return 0 for success, else return 1
 
 =head1 AUTHOR
 
