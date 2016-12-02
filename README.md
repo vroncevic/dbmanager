@@ -45,10 +45,10 @@ This module requires these other modules and libraries:
 	File::Basename
 	Pod::Usage
 	Text::Table
-	Logging (from perl-util project)
-	Configuration (from perl-util project)
-	Notification (from perl-util project)
-	Status (from perl-util project)
+	Logging 		https://github.com/vroncevic/perl-util
+	Configuration 	https://github.com/vroncevic/perl-util
+	Notification 	https://github.com/vroncevic/perl-util
+	Status 			https://github.com/vroncevic/perl-util
 
 COPYRIGHT AND LICENCE
 
